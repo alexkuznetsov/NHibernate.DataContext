@@ -1,0 +1,83 @@
+﻿<#@ template debug="true" hostSpecific="true" #>
+<#@ output extension=".cs" #>
+<#@ Assembly Name="System.Core.dll" #>
+<#@ assembly name="$(SolutionDir)src\SampleDomain\bin\Debug\SampleDomain.dll" #>
+<#@ import namespace="System" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System.Collections" #>
+<#@ import namespace="System.Collections.Generic" #> 
+<#@ import namespace="SampleDomain" #> 
+namespace SampleDomain
+{
+    using NHibernate.DataContext;
+
+    public class DataContext : DbContextBase<DataContext>
+    {     
+        
+        <# foreach(var i in GetTypesList()) {#>
+
+        #region <#= i.Item1 #><# foreach(var name in i.Item2) {
+            if (!i.Item1.Contains("Views"))  
+            #><# WritePropertyAccessor("DbRepoQueryContext", i.Item1, name, false); #><#
+            else
+            #><# WritePropertyAccessor("DbRepoQueryContext", i.Item1, name, true); #><#
+        }
+        #>
+        
+        #endregion
+
+        <# } #>    
+    }
+}
+
+<#+
+List<System.Tuple<string, string[]>> GetTypesList()
+{
+    var assembly = typeof(SampleDomain.Entity).Assembly;
+    var allowed = new string[]
+    {
+        "SampleDomain.ACL",
+        "SampleDomain.Model",
+        /*"Add here your"*/
+    };
+   
+    List<System.Tuple<string, string[]>> types = assembly.GetTypes()
+                            .Where(t => allowed.Contains(t.Namespace))
+                            .Where(t => t.IsClass && !t.IsGenericType && !t.IsAbstract)
+                            .Select(x => new
+                            {
+                                Namespase = x.Namespace,
+                                Name = x.Name
+                            })
+                            .GroupBy(x => x.Namespase)
+                            .Select(x => new Tuple<string, string[]>(x.Key, x.Select(y=>y.Name).ToArray()))
+                            .ToList();
+
+    return types;
+}
+
+string GetCorrentPropertyName(string ns, string className)
+{
+    var nsLastPart = ns.Split('.').Last();
+    return (nsLastPart + "_" + className).Replace(".","_");
+}
+
+void WritePropertyAccessor(string propertyGenericType, string ns, string name, bool isReadonly)
+{
+    var propertyName = GetCorrentPropertyName(ns, name);#>      
+  
+        private <#= propertyGenericType + "<" + ns + "." +name + ">"#> m_<#= propertyName #> = null;
+        public <#= propertyGenericType + "<" + ns + "." +name + ">"#> <#= propertyName #> 
+        { 
+            get
+            {
+                if (m_<#= propertyName #> == null)
+                {
+                    m_<#= propertyName #> = CreateRepoInternalSet<<#=ns#>.<#=name#>>(<#=isReadonly ? "true":"false"#>);
+                }
+
+                return m_<#= propertyName #>;
+            }
+        }<#+
+}
+#>
